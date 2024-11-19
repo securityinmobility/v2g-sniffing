@@ -5,12 +5,12 @@ from set_slac_nid_nmk import set_key
 
 
 # check if the packet contains CM_SLAC_MATCH.CNF
-def extract_load_if_cm_slac_match_cnf(packets, set_key, interface, src_mac, dst_mac):
+def extract_load_if_cm_slac_match_cnf(packets, set_key_on_modem: bool, interface, src_mac, dst_mac):
     for packet in packets:
         if 'HomePlugAV' in packet and packet['HomePlugAV'].HPtype == 24701:  # 24701 is the type of CM_SLAC_MATCH.CNF
             nid, nmk = extract_nid_nmk_from_load(packet['HomePlugAV'].load)
             print(f"Found NID: {nid} and NMK: {nmk}")
-            if set_key:
+            if set_key_on_modem:
                 print("Setting key on destination {dst_mac}")
                 set_key(nid, nmk, src_mac, dst_mac, interface)
             exit(0)
