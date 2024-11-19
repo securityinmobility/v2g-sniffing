@@ -1,0 +1,3 @@
+[submodule "HomePlugPWN"]
+	path = external_libraries/HomePlugPWN
+	url = https://github.com/FlUxIuS/HomePlugPWN.git
