@@ -1,8 +1,19 @@
-from scapy.all import rdpcap, sniff
+from scapy.all import rdpcap, sniff, sendp
+from scapy.all import *
 from scapy.contrib.homeplugav import QualcommTypeList
 from optparse import OptionParser
-from set_slac_nid_nmk import set_key
+#from set_slac_nid_nmk import set_key
+from scapy.contrib.homeplugav import HomePlugAV
+from scapy.contrib.homepluggp import HomePlugGPTypes, CM_SET_KEY_REQ
 
+def set_key(nid, nmk, src_mac, dst_mac, interface):
+    set_key_pkg = Ether(src=src_mac, dst=dst_mac) \
+        / HomePlugAV(version=0x01, HPtype=0x6008) \
+        / CM_SET_KEY_REQ(KeyType=0x1, MyNonce=0xAAAAAAAA, YourNonce=0xe0218244, PID=0x4, NetworkID=nid, NewEncKeySelect=0x1, NewKey=nmk)
+
+    # send the packet two times -> the first time the response is a failure for some reason
+    sendp(set_key_pkg, iface=interface, verbose=1)
+    sendp(set_key_pkg, iface=interface, verbose=1)
 
 # check if the packet contains CM_SLAC_MATCH.CNF
 def extract_load_if_cm_slac_match_cnf(packets, set_key_on_modem: bool, interface, src_mac, dst_mac):
@@ -69,3 +80,5 @@ if __name__ =="__main__":
         sniff(iface=options.interface, prn=lambda packet: extract_load_if_cm_slac_match_cnf(packet, set_key_after_sniffing, options.interface, options.sourcemac, options.destinationmac), store=False)
 
 # python3 find_nid_nmk.py -i '...' -s '...' -d 'c4:93:00:4f:56:bd' -k
+# redbeet mac c4:93:00:4f:56:bd
+# eva mac 00:b0:52:00:00:01
