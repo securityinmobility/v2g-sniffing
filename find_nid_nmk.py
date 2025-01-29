@@ -1,5 +1,4 @@
-from scapy.all import rdpcap, sniff, sendp
-from scapy.all import *
+from scapy.all import rdpcap, sniff, sendp, Ether
 from scapy.contrib.homeplugav import QualcommTypeList
 from optparse import OptionParser
 #from set_slac_nid_nmk import set_key
