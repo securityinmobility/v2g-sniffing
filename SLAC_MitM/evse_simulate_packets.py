@@ -1,7 +1,6 @@
 from scapy.all import Ether
 from scapy.contrib.homepluggp import CM_ATTEN_CHAR_IND, CM_SLAC_PARM_CNF, CM_SLAC_MATCH_CNF
-from general_simulate_packets import send_packet
-
+from general_simulate_packets import send_packet, str_with_colon_to_bytes, str_to_bytes
 
 ATTENUATION_DIVISOR = 2
 
@@ -28,6 +27,6 @@ def duplicate_cm_slac_match_cnf(packet, sending_interface, mitm_evse_mac, mitm_e
         packet[CM_SLAC_MATCH_CNF].VariableField.EVSEID = mitm_evse_id
         packet[CM_SLAC_MATCH_CNF].VariableField.EVSEMAC = mitm_evse_mac
         packet[CM_SLAC_MATCH_CNF].VariableField.RunID = run_id
-        packet[CM_SLAC_MATCH_CNF].VariableField.NetworkID = network_id
-        packet[CM_SLAC_MATCH_CNF].VariableField.NMK = network_membership_key
+        packet[CM_SLAC_MATCH_CNF].VariableField.NetworkID = str_with_colon_to_bytes(network_id)
+        packet[CM_SLAC_MATCH_CNF].VariableField.NMK = str_to_bytes(network_membership_key)
         send_packet(packet, sending_interface)

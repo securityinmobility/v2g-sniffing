@@ -23,7 +23,6 @@ def init_logger():
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-    logger.info('Initialized logger')
 
 
 def handle_packet(
@@ -74,10 +73,10 @@ def handle_packet(
         # make sure to only use packets from original ev for duplication
         if packet[Ether].src == ev_host_mac:
             logger.info(f'Got CM_MNBC_SOUND_IND packet from {packet[Ether].src} - duplicating')
-            duplicate_mnbc_sound_ind(packet, ev_simulation_interface, mitm_ev_mac, mitm_ev_run_id, mitm_ev_sender_id)
             original_ev_id = packet[CM_MNBC_SOUND_IND].SenderID
             original_ev_run_id = packet[CM_MNBC_SOUND_IND].RunID
             logger.info(f'Got Run ID and Sender ID of original EV. Sender ID: {original_ev_id} Run ID: {original_ev_run_id}')
+            duplicate_mnbc_sound_ind(packet, ev_simulation_interface, mitm_ev_mac, mitm_ev_run_id, mitm_ev_sender_id)
 
     # first SLAC packet from EVSE modem - no duplication needed - only evse internal communication
     if evse_host_mac and packet['HomePlugAV'].HPtype == hpgp_types['CM_ATTENUATION_CHARACTERISTICS_MME']:
@@ -92,9 +91,9 @@ def handle_packet(
             # make sure that the only the response to the original ev is used
             if packet[CM_ATTEN_CHAR_IND].RunID == original_ev_run_id:
                 logger.info(f'Got CM_ATTEN_CHAR_IN packet from {packet[Ether].src} - duplicating')
-                duplicate_cm_atten_char_ind(packet, evse_simulation_interface, mitm_evse_mac)
                 original_evse_id = packet[CM_ATTEN_CHAR_IND].ResponseID
                 logger.info(f'Got Response ID of original EVSE: {original_evse_id}')
+                duplicate_cm_atten_char_ind(packet, evse_simulation_interface, mitm_evse_mac)
 
     # response from ev to attenuation profile info from evse
     if packet['HomePlugAV'].HPtype == hpgp_types['CM_ATTEN_CHAR_RSP']:

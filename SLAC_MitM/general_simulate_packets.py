@@ -6,5 +6,8 @@ def bytes_to_str_with_colon(bytes):
 def str_with_colon_to_bytes(str):
     return bytes.fromhex(str.replace(':', ''))
 
+def str_to_bytes(str):
+    return bytes.fromhex(str)
+
 def send_packet(packet, iface):
     sendp(packet, iface=iface)
