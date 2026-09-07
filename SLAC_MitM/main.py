@@ -2,13 +2,13 @@ import logging
 import threading
 import signal
 import sys
-from scapy.all import rdpcap, AsyncSniffer
+from scapy.all import AsyncSniffer
 from scapy.utils import PcapWriter
 from copy_and_adjust_slac import handle_packet
 from datetime import datetime
 
-evse_simulation_interface = "enx607d097bbc10"
-ev_simulation_interface = "enx7cc2c61ec9fd"
+evse_simulation_interface = "enx607d098d1f14"
+ev_simulation_interface = "enx607d097bbc10"
 mitm_evse_mac = 'c4:93:00:4f:56:bd'
 mitm_ev_mac = 'c4:93:00:4f:5f:a1'
 mitm_ev_run_id = 'c0:ff:ee:c0:ff:ee:ee:ee'
@@ -17,7 +17,7 @@ nid_original_ev_simulated_evse = '01:23:45:67:89:ab:cd'
 nmk_original_ev_simulated_evse = '0123456789abcdef0123456789abcdef'
 
 DATE=datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-PCAP_FILE = "capture_combined" + DATE + ".pcap"
+PCAP_FILE = "pcap/capture_combined" + DATE + ".pcap"
 
 logger = None
 sniffer1 = AsyncSniffer(iface=evse_simulation_interface, prn=lambda packet: process_packet(packet))
